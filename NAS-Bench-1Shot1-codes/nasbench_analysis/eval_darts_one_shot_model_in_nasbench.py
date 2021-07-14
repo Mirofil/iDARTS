@@ -115,7 +115,74 @@ def eval_one_shot_model(config, model, nasbench):
         params.append(item['trainable_parameters'])
     return sum(test_error)/len(test_error), sum(valid_error)/len(test_error), sum(runtime)/len(test_error), sum(params)/len(params)
 
+def extract_arch(config, model, nasbench):
+    model_list = pickle.load(open(model, 'rb'))
 
+    alphas_mixed_op = model_list[0]
+    chosen_node_ops = softmax(alphas_mixed_op, axis=-1).argmax(-1)
+
+    node_list = [PRIMITIVES[i] for i in chosen_node_ops]
+    alphas_output = model_list[1]
+    alphas_inputs = model_list[2:]
+
+    if config['search_space'] == '1':
+        search_space = SearchSpace1()
+        num_inputs = list(search_space.num_parents_per_node.values())[3:-1]
+        parents_node_3, parents_node_4 = \
+            [get_top_k(softmax(alpha, axis=1), num_input) for num_input, alpha in zip(num_inputs, alphas_inputs)]
+        output_parents = get_top_k(softmax(alphas_output), num_inputs[-1])
+        parents = {
+            '0': [],
+            '1': [0],
+            '2': [0, 1],
+            '3': parents_node_3,
+            '4': parents_node_4,
+            '5': output_parents
+        }
+        node_list = [INPUT, *node_list, CONV1X1, OUTPUT]
+
+    elif config['search_space'] == '2':
+        search_space = SearchSpace2()
+        num_inputs = list(search_space.num_parents_per_node.values())[2:]
+        parents_node_2, parents_node_3, parents_node_4 = \
+            [get_top_k(softmax(alpha, axis=1), num_input) for num_input, alpha in zip(num_inputs[:-1], alphas_inputs)]
+        output_parents = get_top_k(softmax(alphas_output), num_inputs[-1])
+        parents = {
+            '0': [],
+            '1': [0],
+            '2': parents_node_2,
+            '3': parents_node_3,
+            '4': parents_node_4,
+            '5': output_parents
+        }
+        node_list = [INPUT, *node_list, CONV1X1, OUTPUT]
+
+    elif config['search_space'] == '3':
+        search_space = SearchSpace3()
+        num_inputs = list(search_space.num_parents_per_node.values())[2:]
+        parents_node_2, parents_node_3, parents_node_4, parents_node_5 = \
+            [get_top_k(softmax(alpha, axis=1), num_input) for num_input, alpha in zip(num_inputs[:-1], alphas_inputs)]
+        output_parents = get_top_k(softmax(alphas_output), num_inputs[-1])
+        parents = {
+            '0': [],
+            '1': [0],
+            '2': parents_node_2,
+            '3': parents_node_3,
+            '4': parents_node_4,
+            '5': parents_node_5,
+            '6': output_parents
+        }
+        node_list = [INPUT, *node_list, OUTPUT]
+
+    else:
+        raise ValueError('Unknown search space')
+
+    adjacency_matrix = search_space.create_nasbench_adjacency_matrix(parents)
+    # Convert the adjacency matrix in format for nasbench
+    adjacency_list = adjacency_matrix.astype(np.int).tolist()
+    model_spec = api.ModelSpec(matrix=adjacency_list, ops=node_list)
+
+    return adjacency_matrix, node_list
 
 def eval_directory(path, nasbench):
     """Evaluates all one-shot architecture methods in the directory."""
