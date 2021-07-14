@@ -6,6 +6,22 @@ import higher
 from hessian_eigenthings import compute_hessian_eigenthings
 from torch.autograd import Variable
 
+def gradient(_outputs, _inputs, grad_outputs=None, retain_graph=None,
+            create_graph=False):
+    if torch.is_tensor(_inputs):
+        _inputs = [_inputs]
+    else:
+        _inputs = list(_inputs)
+    grads = torch.autograd.grad(_outputs, _inputs, grad_outputs,
+                                allow_unused=True,
+                                retain_graph=retain_graph,
+                                create_graph=create_graph)
+    grads = [x if x is not None else torch.zeros_like(y) for x, y in zip(grads,
+                                                                          _inputs)]
+    
+    return torch.cat([x.contiguous().view(-1) for x in grads])
+
+
 def _hessian(outputs, inputs, out=None, allow_unused=False,
               create_graph=False, weight_decay=3e-5):
     #assert outputs.data.ndimension() == 1
