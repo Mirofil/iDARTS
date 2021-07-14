@@ -1,3 +1,5 @@
+# python NAS-Bench-1Shot1-codes/optimizers/idarts_v2/train_search.py --T=5 --K=2 --merge_train_val=True
+
 import argparse
 import glob
 import json
@@ -17,10 +19,13 @@ import torch.nn as nn
 import torch.utils
 import torchvision.datasets as dset
 
-
+from genotypes import count_ops
+from utils import genotype_width, genotype_depth
 import sys
-sys.path.append('/data/lwang5/Miao/nasbench-1shot1-master')
 
+from pathlib import Path
+lib_dir = (Path(__file__).parent / '..' / '..').resolve()
+if str(lib_dir) not in sys.path: sys.path.insert(0, str(lib_dir))
 
 from nasbench_analysis.search_spaces.search_space_1 import SearchSpace1
 from nasbench_analysis.search_spaces.search_space_2 import SearchSpace2
@@ -34,8 +39,11 @@ from optimizers.idarts_v2.model_search import Network
 
 from nasbench_analysis import eval_darts_one_shot_model_in_nasbench as naseval
 from nasbench_analysis.utils import NasbenchWrapper
-nasbench = NasbenchWrapper(
-        dataset_file='/data/lwang5/Miao/nasbench-1shot1-master/nasbench_full.tfrecord')
+
+
+import wandb
+from tqdm import tqdm
+from sotl_utils import format_input_data, fo_grad_if_possible, hyper_meta_step, hypergrad_outer, approx_hessian, exact_hessian
 
 parser = argparse.ArgumentParser("cifar")
 parser.add_argument('--data', type=str, default='../data', help='location of the darts corpus')
@@ -66,7 +74,17 @@ parser.add_argument('--search_space', choices=['1', '2', '3'], default='3')
 parser.add_argument('--debug', action='store_true', default=False, help='run only for some batches')
 parser.add_argument('--warm_start_epochs', type=int, default=0,
                     help='Warm start one-shot model before starting architecture updates.')
-args = parser.parse_args([])
+
+parser.add_argument('--merge_train_val', type=lambda x: False if x in ["False", "false", "", "None", False, None] else True, default=False,
+                    help='Warm start one-shot model before starting architecture updates.')
+parser.add_argument('--T', type=int, default=1, help='random_ws seed')
+parser.add_argument('--K', type=int, default=1, help='random_ws seed')
+parser.add_argument('--steps_per_epoch', type=int, default=None,
+                    help='Warm start one-shot model before starting architecture updates.')
+parser.add_argument('--hessian', type=lambda x: False if x in ["False", "false", "", "None", False, None] else True, default=True,
+                    help='Warm start one-shot model before starting architecture updates.')
+
+args = parser.parse_args()
 
 args.save = 'experiments/idarts_v2/search_space_{}/search_step5_k2_new-{}-{}-{}-{}'.format(args.search_space, args.save,
                                                                           time.strftime("%Y%m%d-%H%M%S"), args.seed,
@@ -88,6 +106,59 @@ fh.setFormatter(logging.Formatter(log_format))
 logging.getLogger().addHandler(fh)
 
 CIFAR_CLASSES = 10
+
+def wandb_auth(fname: str = "nas_key.txt"):
+  gdrive_path = "/content/drive/MyDrive/colab/wandb/nas_key.txt"
+  if "WANDB_API_KEY" in os.environ:
+      wandb_key = os.environ["WANDB_API_KEY"]
+  elif os.path.exists(os.path.abspath("~" + os.sep + ".wandb" + os.sep + fname)):
+      # This branch does not seem to work as expected on Paperspace - it gives '/storage/~/.wandb/nas_key.txt'
+      print("Retrieving WANDB key from file")
+      f = open("~" + os.sep + ".wandb" + os.sep + fname, "r")
+      key = f.read().strip()
+      os.environ["WANDB_API_KEY"] = key
+  elif os.path.exists("/root/.wandb/"+fname):
+      print("Retrieving WANDB key from file")
+      f = open("/root/.wandb/"+fname, "r")
+      key = f.read().strip()
+      os.environ["WANDB_API_KEY"] = key
+
+  elif os.path.exists(
+      os.path.expandvars("%userprofile%") + os.sep + ".wandb" + os.sep + fname
+  ):
+      print("Retrieving WANDB key from file")
+      f = open(
+          os.path.expandvars("%userprofile%") + os.sep + ".wandb" + os.sep + fname,
+          "r",
+      )
+      key = f.read().strip()
+      os.environ["WANDB_API_KEY"] = key
+  elif os.path.exists(gdrive_path):
+      print("Retrieving WANDB key from file")
+      f = open(gdrive_path, "r")
+      key = f.read().strip()
+      os.environ["WANDB_API_KEY"] = key
+  wandb.login()
+
+def get_torch_home():
+    if "TORCH_HOME" in os.environ:
+        return os.environ["TORCH_HOME"]
+    elif "HOME" in os.environ:
+        return os.path.join(os.environ["HOME"], ".torch")
+    else:
+        raise ValueError(
+            "Did not find HOME in os.environ. "
+            "Please at least setup the path of HOME or TORCH_HOME "
+            "in the environment."
+        )
+        
+        
+try:
+    nasbench = NasbenchWrapper(
+            dataset_file=os.path.join(get_torch_home(), 'nasbench_only108.tfrecord'))
+except:
+    nasbench = NasbenchWrapper(
+        dataset_file=os.path.join(get_torch_home(), 'nasbench_full.tfrecord'))
 
 def main():
     # Select the search space to search in
@@ -112,6 +183,10 @@ def main():
     torch.cuda.manual_seed(args.seed)
     logging.info('gpu device = %d' % args.gpu)
     logging.info("args = %s", args)
+    logger = logging.getLogger()
+
+    wandb_auth()
+    run = wandb.init(project="NAS", group=f"Search_Cell_idarts", reinit=True)
 
     criterion = nn.CrossEntropyLoss()
     criterion = criterion.cuda()
@@ -147,8 +222,10 @@ def main():
         optimizer, float(args.epochs), eta_min=args.learning_rate_min)
 
     architect = Architect(model, args)
-
-    for epoch in range(args.epochs):
+    if args.merge_train_val:
+        valid_queue = train_queue
+    all_logs = []
+    for epoch in tqdm(range(args.epochs), total =args.epochs, desc="Iterating over epochs"):
         scheduler.step()
         lr = scheduler.get_lr()[0]
         # increase the cutout probability linearly throughout search
@@ -172,37 +249,64 @@ def main():
         print(numpy_tensor_list)
 
         # training
-        train(train_queue, valid_queue, model, architect, criterion, optimizer, lr, epoch)
+        train(train_queue, valid_queue, model, architect, criterion, optimizer, lr, epoch, steps_per_epoch=args.steps_per_epoch)
 
         # validation
         valid_acc, valid_obj = infer(valid_queue, model, criterion)
         logging.info('valid_acc %f', valid_acc)
 
+
         utils.save(model, os.path.join(args.save, 'weights.pt'))
 
         logging.info('STARTING EVALUATION_epoch %f', epoch)
         test, valid, runtime, params = naseval.eval_one_shot_model(config=args.__dict__, model=arch_filename, nasbench=nasbench)
-        index = np.random.choice(list(range(3)))
         logging.info('TEST ERROR: %.3f | VALID ERROR: %.3f | RUNTIME: %f | PARAMS: %d'
-                     % (test[index],
-                        valid[index],
-                        runtime[index],
-                        params[index])
+                     % (test,
+                        valid,
+                        runtime,
+                        params)
                      )
+        genotype_perf = test
+        
 
+        if args.hessian and torch.cuda.get_device_properties(0).total_memory > 15147483648:
+            eigenvalues = exact_hessian(network=model, val_loader=valid_queue, criterion=criterion, xloader=valid_queue, epoch=epoch, logger=logger, args=args)
 
-def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr, epoch):
+        else:
+            eigenvalues = None
+        
+        adj_matrix, ops_list = naseval.extract_arch(config=args.__dict__,
+                                                               model=arch_filename, nasbench=nasbench)
+        
+        width = genotype_width(adj_matrix)
+        depth = genotype_depth(adj_matrix)
+        ops_count = count_ops(ops_list)
+        print(f"Adj matrix: {adj_matrix}, ops_list: {ops_list}, width: {width}, depth: {depth}, ops_count: {ops_count}")
+
+        
+        wandb_log = {"val_acc": valid_acc, "valid_loss":valid_obj,
+                     "search.final.cifar10": genotype_perf, "epoch":epoch, "eigval":eigenvalues, 
+                     "ops": ops_count, "width":width, "depth":depth}
+
+        all_logs.append(wandb_log)
+        wandb.log(wandb_log)
+    for log in tqdm(all_logs, desc = "Logging search logs"):
+        wandb.log(log)
+
+def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr, epoch, steps_per_epoch=None):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
     top5 = utils.AvgrageMeter()
 
-    for step, (input_search, target_search) in enumerate(valid_queue):
+    for step, (input_search, target_search) in tqdm(enumerate(valid_queue), desc = "Iterating over batches", total = len(valid_queue)):
+        if steps_per_epoch is not None and step >= steps_per_epoch:
+            break
         model.train()
        # n = input.size(0)
         
         
         input_search = Variable(input_search, requires_grad=False).cuda()
-        target_search = Variable(target_search, requires_grad=False).cuda(async=True)
+        target_search = Variable(target_search, requires_grad=False).cuda()
 
         architect.step(train_queue, input_search, target_search, lr, optimizer, args.unrolled)
 
@@ -213,23 +317,26 @@ def infer(valid_queue, model, criterion):
     top5 = utils.AvgrageMeter()
     model.eval()
 
-    for step, (input, target) in enumerate(valid_queue):
-        input = input.cuda()
-        target = target.cuda(non_blocking=True)
-
-        logits = model(input)
-        loss = criterion(logits, target)
-
-        prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
-        n = input.size(0)
-        objs.update(loss.data.item(), n)
-        top1.update(prec1.data.item(), n)
-        top5.update(prec5.data.item(), n)
-
-        if step % args.report_freq == 0:
-            logging.info('valid %03d %e %f %f', step, objs.avg, top1.avg, top5.avg)
-            if args.debug:
+    with torch.no_grad():
+        for step, (input, target) in enumerate(valid_queue):
+            if step > 101:
                 break
+            input = input.cuda()
+            target = target.cuda(non_blocking=True)
+
+            logits = model(input)
+            loss = criterion(logits, target)
+
+            prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
+            n = input.size(0)
+            objs.update(loss.data.item(), n)
+            top1.update(prec1.data.item(), n)
+            top5.update(prec5.data.item(), n)
+
+            if step % args.report_freq == 0:
+                logging.info('valid %03d %e %f %f', step, objs.avg, top1.avg, top5.avg)
+                if args.debug:
+                    break
 
     return top1.avg, objs.avg
 

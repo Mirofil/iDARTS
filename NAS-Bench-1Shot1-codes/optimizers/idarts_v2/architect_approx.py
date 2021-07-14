@@ -22,6 +22,7 @@ class Architect(object):
         self.optimizer = torch.optim.Adam(self.model.arch_parameters(),
                                           lr=args.arch_learning_rate, betas=(0.5, 0.999),
                                           weight_decay=args.arch_weight_decay)
+        self.args = args
 
 
     def _compute_unrolled_model(self, train_queue, eta, network_optimizer):
@@ -30,16 +31,17 @@ class Architect(object):
         top1 = utils.AvgrageMeter()
         top5 = utils.AvgrageMeter()    
 
+        train_queue_iter = iter(train_queue)
         #for step, (input, target) in enumerate(train_queue):
-        for step in range(5):
-            input, target = next(iter(train_queue))		
+        for step in range(self.args.T):
+            input, target = next(train_queue_iter)		
 
 
             self.model.train()
             n = input.size(0)
 
             input = Variable(input, requires_grad=False).cuda()
-            target = Variable(target, requires_grad=False).cuda(async=True)
+            target = Variable(target, requires_grad=False).cuda()
 
             network_optimizer.zero_grad()
             logits = self.model(input)
@@ -66,7 +68,11 @@ class Architect(object):
         loss_last=grad_norm.sqrt()
         loss_last.backward()
 
-        grads_2 = [(1+(1-eta*v.grad.data)+(1-eta*v.grad.data).pow(2)) for v in model_last.parameters()]        #######consider the approximation with only the diagonal elements
+        # grads_2 = [(1+(1-eta*v.grad.data)+(1-eta*v.grad.data).pow(2)) for v in model_last.parameters()]        #######consider the approximation with only the diagonal elements
+        num_K = self.args.K+1 # The +1 is so that the range() takes values in [0, .., K]
+        grads_2 = [sum([(1-eta*v.grad.data).pow(k) for k in range(num_K)]) for v in model_last.parameters()]        #######consider the approximation with only the diagonal elements
+
+        
         del model_last
         unrolled_model = deepcopy(self.model)
         unrolled_network_optimizer = deepcopy(network_optimizer)
@@ -116,8 +122,8 @@ class Architect(object):
 
         input, target = next(iter(train_queue))     
         n = input.size(0)
-        input = Variable(input, volatile=True).cuda()
-        target = Variable(target, volatile=True).cuda(async=True)
+        input = Variable(input).cuda()
+        target = Variable(target).cuda()
         loss = self.model._loss(input, target)                
 
 
@@ -130,8 +136,9 @@ class Architect(object):
         loss = self.model._loss(input, target)                 
         grads_n = torch.autograd.grad(loss, self.model.arch_parameters())
 
-        for p, v in zip(self.model.parameters(), vector):###We empirically found adding noise for supernet training could improve performance.
-            p.data.add_(R, v*g)
+        # NOTE doesnt seem to work?
+        # for p, v in zip(self.model.parameters(), vector):###We empirically found adding noise for supernet training could improve performance.
+        #     p.data.add_(R, v*g)
 
         return [(x-y).div_(2*R) for x, y in zip(grads_p, grads_n)]
 

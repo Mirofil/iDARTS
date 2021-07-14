@@ -125,6 +125,8 @@ class Network(nn.Module):
         self._steps = steps
         self._output_weights = output_weights
         self.search_space = search_space
+        self._max_nodes = steps
+        self._op_names = PRIMITIVES
 
         # In NASBench the stem has 128 output channels
         C_curr = C

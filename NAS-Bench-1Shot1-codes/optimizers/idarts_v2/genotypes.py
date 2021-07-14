@@ -8,6 +8,11 @@ PRIMITIVES = [
     'conv1x1-bn-relu'
 ]
 
+def count_ops(genotype):
+  genotype = str(genotype)
+  counts = {op: genotype.count(op) for op in PRIMITIVES}
+  return counts
+
 NASNet = Genotype(
     normal=[
         ('sep_conv_5x5', 1),

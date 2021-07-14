@@ -172,7 +172,7 @@ def train(train_queue, model, criterion, optimizer):
     model.train()
 
     for step, (input, target) in enumerate(train_queue):
-        target = target.cuda(async=True)
+        target = target.cuda()
         input = input.cuda()
         input = Variable(input)
         target = Variable(target)

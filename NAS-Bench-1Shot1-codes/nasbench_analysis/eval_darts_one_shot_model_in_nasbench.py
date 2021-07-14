@@ -4,7 +4,7 @@ import os
 import pickle
 
 import sys
-sys.path.append('/data/lwang5/Miao/nasbench-1shot1-master')
+# sys.path.append('/data/lwang5/Miao/nasbench-1shot1-master')
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -109,11 +109,12 @@ def eval_one_shot_model(config, model, nasbench):
     data = nasbench.query(model_spec)
     valid_error, test_error, runtime, params = [], [], [], []
     for item in data:
-        test_error.append(1 - item['test_accuracy'])
-        valid_error.append(1 - item['validation_accuracy'])
+        test_error.append(item['test_accuracy'])
+        valid_error.append(item['validation_accuracy'])
         runtime.append(item['training_time'])
         params.append(item['trainable_parameters'])
-    return test_error, valid_error, runtime, params
+    return sum(test_error)/len(test_error), sum(valid_error)/len(test_error), sum(runtime)/len(test_error), sum(params)/len(params)
+
 
 
 def eval_directory(path, nasbench):
