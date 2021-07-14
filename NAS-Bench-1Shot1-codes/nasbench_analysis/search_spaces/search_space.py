@@ -9,6 +9,11 @@ from nasbench import api
 
 from nasbench_analysis.utils import CONV1X1, CONV3X3, MAXPOOL3X3, INPUT, OUTPUT, upscale_to_nasbench_format
 from nasbench_analysis.utils import parent_combinations as parent_combinations_old
+
+from pathlib import Path
+lib_dir = (Path(__file__).parent / '..' ).resolve()
+if str(lib_dir) not in sys.path: sys.path.insert(0, str(lib_dir))
+
 from optimizers.darts.genotypes import PRIMITIVES
 
 
