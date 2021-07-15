@@ -224,7 +224,21 @@ def main():
     architect = Architect(model, args)
     if args.merge_train_val:
         valid_queue = train_queue
-    all_logs = []
+        
+    if os.path.exists(Path(args.save) / "checkpoint.pt"):
+        checkpoint = torch.load(Path(args.save) / "checkpoint.pt")
+        optimizer.load_state_dict(checkpoint["w_optimizer"])
+        architect.optimizer.load_state_dict(checkpoint["a_optimizer"])
+        model.load_state_dict(checkpoint["model"])
+        scheduler.load_state_dict(checkpoint["w_scheduler"])
+        start_epoch = checkpoint["epoch"]
+        all_logs = checkpoint["all_logs"]
+
+    else:
+        print(f"Path at {Path(args.save) / 'checkpoint.pt'} does not exist")
+        start_epoch=0
+        all_logs=[]   
+         
     for epoch in tqdm(range(args.epochs), total =args.epochs, desc="Iterating over epochs"):
         scheduler.step()
         lr = scheduler.get_lr()[0]
@@ -255,8 +269,6 @@ def main():
         valid_acc, valid_obj = infer(valid_queue, model, criterion)
         logging.info('valid_acc %f', valid_acc)
 
-
-        utils.save(model, os.path.join(args.save, 'weights.pt'))
 
         logging.info('STARTING EVALUATION_epoch %f', epoch)
         test, valid, runtime, params = naseval.eval_one_shot_model(config=args.__dict__, model=arch_filename, nasbench=nasbench)
@@ -290,6 +302,13 @@ def main():
 
         all_logs.append(wandb_log)
         wandb.log(wandb_log)
+        
+        
+        utils.save_checkpoint2({"model":model.state_dict(), "w_optimizer":optimizer.state_dict(), 
+                    "a_optimizer":architect.optimizer.state_dict(), "w_scheduler":scheduler.state_dict(), "epoch": epoch, 
+                    "all_logs":all_logs}, 
+                    Path(args.save) / "checkpoint.pt", logger=None)
+        print(f"Saved checkpoint to {Path(args.save) / 'checkpoint.pt'}")
     for log in tqdm(all_logs, desc = "Logging search logs"):
         wandb.log(log)
 
