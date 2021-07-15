@@ -86,8 +86,8 @@ parser.add_argument('--hessian', type=lambda x: False if x in ["False", "false",
 
 args = parser.parse_args()
 
-args.save = 'experiments/idarts_v2/search_space_{}/search_step5_k2_new-{}-{}-{}-{}'.format(args.search_space, args.save,
-                                                                          time.strftime("%Y%m%d-%H%M%S"), args.seed,
+args.save = 'experiments/idarts_v2/search_space_{}/search_step5_k2_new-{}-{}-{}'.format(args.search_space, args.save,
+                                                                          args.seed,
                                                                           args.search_space)
 utils.create_exp_dir(args.save, scripts_to_save=glob.glob('*.py'))
 
