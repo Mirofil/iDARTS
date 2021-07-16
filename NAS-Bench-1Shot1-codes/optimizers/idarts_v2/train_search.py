@@ -89,7 +89,11 @@ args = parser.parse_args()
 args.save = 'experiments/idarts_v2/search_space_{}/search_step5_k2_new-{}-{}-{}'.format(args.search_space, args.save,
                                                                           args.seed,
                                                                           args.search_space)
-utils.create_exp_dir(args.save, scripts_to_save=glob.glob('*.py'))
+
+try:
+    utils.create_exp_dir(args.save, scripts_to_save=glob.glob('*.py'))
+except Exception as e:
+    print(f"Didnt create another exp dir due to {e}")
 
 # Dump the config of the run
 with open(os.path.join(args.save, 'config.json'), 'w') as fp:
