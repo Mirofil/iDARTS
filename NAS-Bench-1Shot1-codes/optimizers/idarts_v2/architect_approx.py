@@ -25,70 +25,6 @@ class Architect(object):
         self.args = args
 
 
-    def _compute_unrolled_model_sotl(self, train_queue, eta, network_optimizer):
-
-        objs = utils.AvgrageMeter()
-        top1 = utils.AvgrageMeter()
-        top5 = utils.AvgrageMeter()    
-
-        train_queue_iter = iter(train_queue)
-        so_grad = [torch.zeros_like(p) for p in self.model.arch_parameters()]
-        fo_grad = [torch.zeros_like(p) for p in self.model.arch_parameters()]
-
-        all_inputs, all_targets = [], []
-        
-        
-        for step in range(self.args.T):
-            input, target = next(train_queue_iter)		
-            all_inputs.append(input)
-            all_targets.append(target)
-
-            self.model.train()
-            n = input.size(0)
-
-            input = Variable(input, requires_grad=False).cuda()
-            target = Variable(target, requires_grad=False).cuda()
-
-            network_optimizer.zero_grad()
-            logits = self.model(input)
-            loss = criterion(logits, target)
-
-            loss.backward(create_graph=True)
-            nn.utils.clip_grad_norm(self.model.parameters(), 5)
-            network_optimizer.step()
-            
-            
-            if self.args.sotl_order == "second":
-                k = max(0, step-1) # t=2 corresponds to second-order DARTS, which still has no I-Hessian term. So for T=4 unrolling steps we only have the complicated gradient for the last two losses 
-                if k == 0:
-                    grads_2 = [torch.zeros_like(p) for p in self.model.parameters()]
-                else:
-                    grad_norm=0
-                    for p in self.model.parameters(): # Empirical Fisher to approximate Hessian in formula
-                        grad = p.grad
-                        grad_norm +=grad.pow(2).sum()
-                    loss_last=grad_norm.sqrt()
-                    loss_last.backward()
-                    
-                    grads_2 = [(1-eta*v.grad.data).pow(k) for v in self.model.parameters()]        #######consider the approximation with only the diagonal elements
-                with torch.no_grad():
-                    for g1, g2 in zip(so_grad, grads_2):
-                        g1.add_(g2)
-
-            with torch.no_grad():
-                for g1, p in zip(fo_grad, self.model.parameters()):
-                    g1.add_(p.grad.data)
-
-            prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
-            objs.update(loss, n)
-            top1.update(prec1.data, n)
-            top5.update(prec5.data, n)
-        
-        unrolled_model = deepcopy(self.model)
-        unrolled_network_optimizer = deepcopy(network_optimizer)
-
-        return unrolled_model.cuda(), so_grad, fo_grad
-
     def _compute_unrolled_model(self, train_queue, eta, network_optimizer):
 
         objs = utils.AvgrageMeter()
@@ -97,6 +33,9 @@ class Architect(object):
 
         train_queue_iter = iter(train_queue)
         #for step, (input, target) in enumerate(train_queue):
+        
+        fo_grad = [torch.zeros_like(p) for p in self.model.arch_parameters()]
+        
         for step in range(self.args.T):
             input, target = next(train_queue_iter)		
 
@@ -119,7 +58,11 @@ class Architect(object):
             objs.update(loss, n)
             top1.update(prec1.data, n)
             top5.update(prec5.data, n)
-
+            
+            with torch.no_grad():
+                for g1, g2 in zip(fo_grad, self.model.arch_parameters()):
+                    g1.add_(g2)
+            
         try:
             model_last=deepcopy(self.model)
         except:
@@ -150,7 +93,7 @@ class Architect(object):
         unrolled_model = deepcopy(self.model)
         unrolled_network_optimizer = deepcopy(network_optimizer)
 
-        return unrolled_model.cuda(), grads_2
+        return unrolled_model.cuda(), grads_2, fo_grad
 
     def step(self, train_queue, input_valid, target_valid, eta, network_optimizer, unrolled):
         self.optimizer.zero_grad()
@@ -168,10 +111,7 @@ class Architect(object):
         loss.backward()
 
     def _backward_step_unrolled(self, train_queue, input_valid, target_valid, eta, network_optimizer):
-        if self.args.sotl_order is None:
-            unrolled_model, grads_2 = self._compute_unrolled_model(train_queue, eta, network_optimizer)######copy a model for the L_val, since the model should nog trained by validation data
-        elif self.args.sotl_order in ["second", "first"]:
-            unrolled_model, grads_2, fo_grad = self._compute_unrolled_model_sotl(train_queue, eta, network_optimizer)######copy a model for the L_val, since the model should nog trained by validation data
+        unrolled_model, grads_2, arch_fo_grad = self._compute_unrolled_model(train_queue, eta, network_optimizer)######copy a model for the L_val, since the model should nog trained by validation data
 
         unrolled_loss = unrolled_model._loss(input_valid, target_valid)
         #print(unrolled_loss)
@@ -184,7 +124,7 @@ class Architect(object):
         
         if self.args.sotl_order in ["first", "second"]:
             with torch.no_grad():
-                for g1, g2 in zip(implicit_grads, fo_grad):
+                for g1, g2 in zip(implicit_grads, arch_fo_grad):
                     g1.add_(g2)
 
         for g, ig in zip(dalpha, implicit_grads):
