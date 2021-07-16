@@ -56,7 +56,13 @@ class Architect(object):
             top1.update(prec1.data, n)
             top5.update(prec5.data, n)
 
-        model_last=deepcopy(self.model)
+        try:
+            model_last=deepcopy(self.model)
+        except:
+            try:
+                model_last = deepcopy(self.model)
+            except:
+                model_las = deepcopy(self.model)
 
         logits = model_last(input)
         loss_l1 = criterion(logits, target)
