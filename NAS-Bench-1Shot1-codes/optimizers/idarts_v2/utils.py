@@ -369,6 +369,6 @@ def save_checkpoint2(state, filename, logger=None, quiet=False, backup=True):
       logger.log(f"Failed to save new checkpoint into {filename} due to {e}")
     assert osp.isfile(filename), 'save filename : {:} failed, which is not found.'.format(filename)
     if hasattr(logger, 'log') and not quiet: logger.log('save checkpoint into {:}'.format(filename))
-  except:
-    print(f"Failed to save_checkpoint to {filename}")
+  except Exception as e:
+    print(f"Failed to save_checkpoint to {filename} due to {e}")
   return filename

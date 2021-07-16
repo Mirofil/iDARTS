@@ -313,7 +313,7 @@ def main():
         save_checkpoint2({"model":model.state_dict(), "w_optimizer":optimizer.state_dict(), 
                     "a_optimizer":architect.optimizer.state_dict(), "w_scheduler":scheduler.state_dict(), "epoch": epoch, 
                     "all_logs":all_logs}, 
-                    Path(args.save) / "checkpoint.pt", logger=None)
+                    Path(args.save) / "checkpoint.pt", logger=logger)
         print(f"Saved checkpoint to {Path(args.save) / 'checkpoint.pt'}")
     for log in tqdm(all_logs, desc = "Logging search logs"):
         wandb.log(log)

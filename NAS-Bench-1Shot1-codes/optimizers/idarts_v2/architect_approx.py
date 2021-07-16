@@ -62,20 +62,21 @@ class Architect(object):
             try:
                 model_last = deepcopy(self.model)
             except:
-                model_las = deepcopy(self.model)
+                model_last = deepcopy(self.model)
 
         logits = model_last(input)
         loss_l1 = criterion(logits, target)
         grads_1 = torch.autograd.grad(loss_l1, model_last.parameters(), create_graph=True)#[0]
 
         grad_norm=0
-        for grad in grads_1:
+        for grad in grads_1: # Empirical Fisher to approximate Hessian in formula
             grad_norm +=grad.pow(2).sum()
         loss_last=grad_norm.sqrt()
         loss_last.backward()
 
         # grads_2 = [(1+(1-eta*v.grad.data)+(1-eta*v.grad.data).pow(2)) for v in model_last.parameters()]        #######consider the approximation with only the diagonal elements
         num_K = self.args.K+1 # The +1 is so that the range() takes values in [0, .., K]
+        
         grads_2 = [sum([(1-eta*v.grad.data).pow(k) for k in range(num_K)]) for v in model_last.parameters()]        #######consider the approximation with only the diagonal elements
 
         
