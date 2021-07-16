@@ -33,10 +33,14 @@ class Architect(object):
 
         train_queue_iter = iter(train_queue)
         fo_grad = [torch.zeros_like(p) for p in self.model.arch_parameters()]
+        all_inputs, all_targets = [], []
+        
+        model_init = deepcopy(model)
         
         for step in range(self.args.T):
             input, target = next(train_queue_iter)		
-
+            all_inputs.append(input)
+            all_targets.append(target)
 
             self.model.train()
             n = input.size(0)
@@ -56,17 +60,10 @@ class Architect(object):
             objs.update(loss, n)
             top1.update(prec1.data, n)
             top5.update(prec5.data, n)
-        try:
-            model_last=deepcopy(self.model)
-        except:
-            try:
-                model_last = deepcopy(self.model)
-            except:
-                model_last = deepcopy(self.model)
 
-        logits = model_last(input)
+        logits = self.model(input)
         loss_l1 = criterion(logits, target)
-        grads_1 = torch.autograd.grad(loss_l1, model_last.parameters(), create_graph=True)#[0]
+        grads_1 = torch.autograd.grad(loss_l1, self.model.parameters(), create_graph=True)#[0]
 
         grad_norm=0
         for grad in grads_1: # Empirical Fisher to approximate Hessian in formula
@@ -76,6 +73,9 @@ class Architect(object):
 
         # grads_2 = [(1+(1-eta*v.grad.data)+(1-eta*v.grad.data).pow(2)) for v in model_last.parameters()]        #######consider the approximation with only the diagonal elements
         num_K = self.args.K+1 # The +1 is so that the range() takes values in [0, .., K]
+        
+        for v in self.model.parameters():
+            pass
         
         grads_2 = [sum([(1-eta*v.grad.data).pow(k) for k in range(num_K)]) for v in model_last.parameters()]        #######consider the approximation with only the diagonal elements
 
@@ -120,9 +120,11 @@ class Architect(object):
         try:
             model_last=deepcopy(self.model)
         except:
+            print("Failed once")
             try:
                 model_last = deepcopy(self.model)
             except:
+                print("Failed twice")
                 model_last = deepcopy(self.model)
 
         logits = model_last(input)
