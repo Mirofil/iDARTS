@@ -237,13 +237,15 @@ def main():
         scheduler.load_state_dict(checkpoint["w_scheduler"])
         start_epoch = checkpoint["epoch"]
         all_logs = checkpoint["all_logs"]
+        print(f"Loading checkpoint with start_epoch={start_epoch}, len all logs = {len(all_logs)}")
+
 
     else:
         print(f"Path at {Path(args.save) / 'checkpoint.pt'} does not exist")
         start_epoch=0
         all_logs=[]   
          
-    for epoch in tqdm(range(args.epochs), total =args.epochs, desc="Iterating over epochs"):
+    for epoch in tqdm(range(start_epoch, args.epochs), total =args.epochs, desc="Iterating over epochs"):
         scheduler.step()
         lr = scheduler.get_lr()[0]
         # increase the cutout probability linearly throughout search
