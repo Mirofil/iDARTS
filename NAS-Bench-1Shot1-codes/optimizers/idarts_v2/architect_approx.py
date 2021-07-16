@@ -25,6 +25,67 @@ class Architect(object):
         self.args = args
 
 
+    def _compute_unrolled_model_sotl(self, train_queue, eta, network_optimizer):
+
+        objs = utils.AvgrageMeter()
+        top1 = utils.AvgrageMeter()
+        top5 = utils.AvgrageMeter()    
+
+        train_queue_iter = iter(train_queue)
+        fo_grad = [torch.zeros_like(p) for p in self.model.arch_parameters()]
+        
+        for step in range(self.args.T):
+            input, target = next(train_queue_iter)		
+
+
+            self.model.train()
+            n = input.size(0)
+
+            input = Variable(input, requires_grad=False).cuda()
+            target = Variable(target, requires_grad=False).cuda()
+
+            network_optimizer.zero_grad()
+            logits = self.model(input)
+            loss = criterion(logits, target)
+
+            loss.backward()
+            nn.utils.clip_grad_norm(self.model.parameters(), 5)
+            network_optimizer.step()
+
+            prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
+            objs.update(loss, n)
+            top1.update(prec1.data, n)
+            top5.update(prec5.data, n)
+        try:
+            model_last=deepcopy(self.model)
+        except:
+            try:
+                model_last = deepcopy(self.model)
+            except:
+                model_last = deepcopy(self.model)
+
+        logits = model_last(input)
+        loss_l1 = criterion(logits, target)
+        grads_1 = torch.autograd.grad(loss_l1, model_last.parameters(), create_graph=True)#[0]
+
+        grad_norm=0
+        for grad in grads_1: # Empirical Fisher to approximate Hessian in formula
+            grad_norm +=grad.pow(2).sum()
+        loss_last=grad_norm.sqrt()
+        loss_last.backward()
+
+        # grads_2 = [(1+(1-eta*v.grad.data)+(1-eta*v.grad.data).pow(2)) for v in model_last.parameters()]        #######consider the approximation with only the diagonal elements
+        num_K = self.args.K+1 # The +1 is so that the range() takes values in [0, .., K]
+        
+        grads_2 = [sum([(1-eta*v.grad.data).pow(k) for k in range(num_K)]) for v in model_last.parameters()]        #######consider the approximation with only the diagonal elements
+
+        
+        del model_last
+        unrolled_model = deepcopy(self.model)
+        unrolled_network_optimizer = deepcopy(network_optimizer)
+
+        return unrolled_model.cuda(), grads_2
+
     def _compute_unrolled_model(self, train_queue, eta, network_optimizer):
 
         objs = utils.AvgrageMeter()
