@@ -82,17 +82,20 @@ class Architect(object):
             
             network_optimizer.step()
             
-        
-
             prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
             objs.update(loss, n)
             top1.update(prec1.data, n)
             top5.update(prec5.data, n)
         
+        self.model.zero_grad()
         with torch.no_grad():
             for p in self.model.parameters():
                 p.grad = None
-        unrolled_model = deepcopy(self.model)
+        # unrolled_model = deepcopy(self.model)
+        
+        unrolled_model = self.model.new()
+        unrolled_model.load_state_dict(self.model.state_dict())
+        
         unrolled_network_optimizer = deepcopy(network_optimizer)
 
         return unrolled_model.cuda(), so_grad, fo_grad

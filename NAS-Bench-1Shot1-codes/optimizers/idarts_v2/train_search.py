@@ -89,9 +89,9 @@ parser.add_argument('--sotl_order', type=str, default=None, choices=["second", "
 
 args = parser.parse_args()
 
-args.save = 'experiments/idarts_v2/search_space_{}/search_step5_k2_new-{}-{}-{}'.format(args.search_space, args.save,
+args.save = 'experiments/idarts_v2/search_space_{}/search_step5_k2_new-{}-{}-{}-{}'.format(args.search_space, args.save,
                                                                           args.seed,
-                                                                          args.search_space)
+                                                                          args.search_space, args.sotl_order)
 
 try:
     utils.create_exp_dir(args.save, scripts_to_save=glob.glob('*.py'))
