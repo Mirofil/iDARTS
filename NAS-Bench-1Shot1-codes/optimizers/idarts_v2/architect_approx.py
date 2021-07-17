@@ -32,7 +32,7 @@ class Architect(object):
         top5 = utils.AvgrageMeter()    
 
         train_queue_iter = iter(train_queue)
-        so_grad = [torch.zeros_like(p) for p in self.model.arch_parameters()]
+        so_grad = [torch.zeros_like(p) for p in self.model.parameters()]
         fo_grad = [torch.zeros_like(p) for p in self.model.arch_parameters()]
 
         all_inputs, all_targets = [], []
@@ -55,8 +55,6 @@ class Architect(object):
 
             loss.backward(create_graph=True)
             nn.utils.clip_grad_norm(self.model.parameters(), 5)
-            network_optimizer.step()
-            
             
             if self.args.sotl_order == "second":
                 k = max(0, step-1) # t=2 corresponds to second-order DARTS, which still has no I-Hessian term. So for T=4 unrolling steps we only have the complicated gradient for the last two losses 
@@ -76,17 +74,24 @@ class Architect(object):
                         grads_2 = [(1-eta*v.grad.data)*g for g,v in zip(so_grad, self.model.parameters())]
                 with torch.no_grad():
                     for g1, g2 in zip(so_grad, grads_2):
-                        g1.add_(g2)
+                        g1.data += g2.data
 
             with torch.no_grad():
-                for g1, p in zip(fo_grad, self.model.parameters()):
-                    g1.add_(p.grad.data)
+                for g1, p in zip(fo_grad, self.model.arch_parameters()):
+                    g1.data += p.grad.data
+            
+            network_optimizer.step()
+            
+        
 
             prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
             objs.update(loss, n)
             top1.update(prec1.data, n)
             top5.update(prec5.data, n)
         
+        with torch.no_grad():
+            for p in self.model.parameters():
+                p.grad = None
         unrolled_model = deepcopy(self.model)
         unrolled_network_optimizer = deepcopy(network_optimizer)
 
@@ -193,6 +198,8 @@ class Architect(object):
         del unrolled_model
         implicit_grads = self._hessian_vector_product(vector, train_queue, grads_2)######this should be L_train(w*,a), so the data should be train
         
+        
+        print(arch_fo_grad)
         if self.args.sotl_order in ["first", "second"]:
             with torch.no_grad():
                 for g1, g2 in zip(implicit_grads, arch_fo_grad):

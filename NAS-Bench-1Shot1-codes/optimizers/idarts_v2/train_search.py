@@ -1,4 +1,5 @@
 # python NAS-Bench-1Shot1-codes/optimizers/idarts_v2/train_search.py --T=5 --K=2 --merge_train_val=True
+# python NAS-Bench-1Shot1-codes/optimizers/idarts_v2/train_search.py --T=5 --K=2 --merge_train_val=True --sotl_order=second --batch_size=2
 
 import argparse
 import glob
@@ -235,13 +236,16 @@ def main():
         checkpoint = torch.load(Path(args.save) / "checkpoint.pt")
         optimizer.load_state_dict(checkpoint["w_optimizer"])
         architect.optimizer.load_state_dict(checkpoint["a_optimizer"])
-        model = checkpoint["model"]
+        model.load_state_dict(checkpoint["model"])
         scheduler.load_state_dict(checkpoint["w_scheduler"])
         start_epoch = checkpoint["epoch"]
         all_logs = checkpoint["all_logs"]
+        
+        with torch.no_grad():
+            for p1, p2 in zip(model.arch_parameters(), checkpoint["alphas"]):
+                p1.data = p2.data
+            
         print(f"Loading checkpoint with start_epoch={start_epoch}, len all logs = {len(all_logs)}")
-
-
     else:
         print(f"Path at {Path(args.save) / 'checkpoint.pt'} does not exist")
         start_epoch=0
@@ -312,8 +316,8 @@ def main():
         wandb.log(wandb_log)
         
         
-        save_checkpoint2({"model":model, "w_optimizer":optimizer.state_dict(), 
-                    "a_optimizer":architect.optimizer.state_dict(), "w_scheduler":scheduler.state_dict(), "epoch": epoch, 
+        save_checkpoint2({"model":model.state_dict(), "w_optimizer":optimizer.state_dict(), 
+                    "a_optimizer":architect.optimizer.state_dict(), "w_scheduler":scheduler.state_dict(), "epoch": epoch, "alphas": list(model.arch_parameters()),
                     "all_logs":all_logs}, 
                     Path(args.save) / "checkpoint.pt", logger=logger)
         print(f"Saved checkpoint to {Path(args.save) / 'checkpoint.pt'}")

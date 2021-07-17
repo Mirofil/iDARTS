@@ -349,9 +349,7 @@ def genotype_width(adj_matrix):
   import networkx
   G = networkx.convert_matrix.from_numpy_matrix(adj_matrix)
   width = networkx.algorithms.approximation.maxcut.one_exchange(G)[0]
-  
   return width
-      
       
 def save_checkpoint2(state, filename, logger=None, quiet=False, backup=True):
   try:
