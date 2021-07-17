@@ -235,7 +235,7 @@ def main():
         checkpoint = torch.load(Path(args.save) / "checkpoint.pt")
         optimizer.load_state_dict(checkpoint["w_optimizer"])
         architect.optimizer.load_state_dict(checkpoint["a_optimizer"])
-        model.load_state_dict(checkpoint["model"])
+        model = checkpoint["model"]
         scheduler.load_state_dict(checkpoint["w_scheduler"])
         start_epoch = checkpoint["epoch"]
         all_logs = checkpoint["all_logs"]
@@ -312,7 +312,7 @@ def main():
         wandb.log(wandb_log)
         
         
-        save_checkpoint2({"model":model.state_dict(), "w_optimizer":optimizer.state_dict(), 
+        save_checkpoint2({"model":model, "w_optimizer":optimizer.state_dict(), 
                     "a_optimizer":architect.optimizer.state_dict(), "w_scheduler":scheduler.state_dict(), "epoch": epoch, 
                     "all_logs":all_logs}, 
                     Path(args.save) / "checkpoint.pt", logger=logger)
