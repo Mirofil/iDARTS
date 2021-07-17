@@ -70,7 +70,10 @@ class Architect(object):
                     loss_last=grad_norm.sqrt()
                     loss_last.backward()
                     
-                    grads_2 = [(1-eta*v.grad.data).pow(k) for v in self.model.parameters()]        #######consider the approximation with only the diagonal elements
+                    if k == 1:
+                        grads_2 = [(1-eta*v.grad.data).pow(k) for v in self.model.parameters()]        #######consider the approximation with only the diagonal elements
+                    else:
+                        grads_2 = [(1-eta*v.grad.data)*g for g,v in zip(so_grad, self.model.parameters())]
                 with torch.no_grad():
                     for g1, g2 in zip(so_grad, grads_2):
                         g1.add_(g2)

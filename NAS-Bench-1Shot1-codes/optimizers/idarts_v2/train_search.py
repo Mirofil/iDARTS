@@ -247,7 +247,7 @@ def main():
         start_epoch=0
         all_logs=[]   
          
-    for epoch in tqdm(range(start_epoch, args.epochs), total =args.epochs, desc="Iterating over epochs"):
+    for epoch in tqdm(range(start_epoch, args.epochs), total = args.epochs - start_epoch, desc="Iterating over epochs"):
         scheduler.step()
         lr = scheduler.get_lr()[0]
         # increase the cutout probability linearly throughout search
