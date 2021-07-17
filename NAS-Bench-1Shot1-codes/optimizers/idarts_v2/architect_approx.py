@@ -199,7 +199,7 @@ class Architect(object):
         implicit_grads = self._hessian_vector_product(vector, train_queue, grads_2)######this should be L_train(w*,a), so the data should be train
         
         
-        print(arch_fo_grad)
+        # print(arch_fo_grad)
         if self.args.sotl_order in ["first", "second"]:
             with torch.no_grad():
                 for g1, g2 in zip(implicit_grads, arch_fo_grad):
