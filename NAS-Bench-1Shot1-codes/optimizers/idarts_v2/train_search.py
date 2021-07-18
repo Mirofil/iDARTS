@@ -85,7 +85,7 @@ parser.add_argument('--steps_per_epoch', type=int, default=None,
 parser.add_argument('--hessian', type=lambda x: False if x in ["False", "false", "", "None", False, None] else True, default=True,
                     help='Warm start one-shot model before starting architecture updates.')
 
-parser.add_argument('--sotl_order', type=str, default=None, choices=["second", "first"], help='experiment name')
+parser.add_argument('--sotl_order', type=str, default=None, choices=["second", "first", "basic"], help='experiment name')
 
 args = parser.parse_args()
 
