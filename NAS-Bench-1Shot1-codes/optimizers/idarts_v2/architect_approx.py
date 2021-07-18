@@ -193,6 +193,7 @@ class Architect(object):
         elif self.args.sotl_order in ["second", "first"]:
             unrolled_model, grads_2, arch_fo_grad = self._compute_unrolled_model_sotl(train_queue, eta, network_optimizer)######copy a model for the L_val, since the model should nog trained by validation data
 
+        
         unrolled_loss = unrolled_model._loss(input_valid, target_valid)
         #print(unrolled_loss)
         unrolled_loss.backward()
@@ -205,7 +206,6 @@ class Architect(object):
         
         # print(arch_fo_grad)
         if self.args.sotl_order in ["first", "second", "basic"]:
-            print(arch_fo_grad)
             with torch.no_grad():
                 for g1, g2 in zip(implicit_grads, arch_fo_grad):
                     g1.add_(g2)
