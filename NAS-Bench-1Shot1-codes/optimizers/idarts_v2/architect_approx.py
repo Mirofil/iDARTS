@@ -75,11 +75,11 @@ class Architect(object):
                 with torch.no_grad():
                     for g1, g2 in zip(so_grad, grads_2):
                         g1.data += g2.data
-            if not (self.args.sotl_order == "second" and step == self.args.T - 1):
-                with torch.no_grad():
-                    for g1, p in zip(fo_grad, self.model.arch_parameters()):
-                        g1.data += p.grad.data
-                
+            # if not (self.args.sotl_order == "second" and step == self.args.T - 1):
+            with torch.no_grad():
+                for g1, p in zip(fo_grad, self.model.arch_parameters()):
+                    g1.data += p.grad.data
+            
             network_optimizer.step()
             
             prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
@@ -134,10 +134,10 @@ class Architect(object):
             top1.update(prec1.data, n)
             top5.update(prec5.data, n)
             
-            if not (step == self.args.T - 1):
-                with torch.no_grad():
-                    for g1, g2 in zip(fo_grad, self.model.arch_parameters()):
-                        g1.add_(g2)
+            # if not (step == self.args.T - 1):
+            with torch.no_grad():
+                for g1, g2 in zip(fo_grad, self.model.arch_parameters()):
+                    g1.add_(g2)
                 
 
         try:
