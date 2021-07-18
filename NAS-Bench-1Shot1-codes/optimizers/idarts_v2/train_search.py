@@ -164,7 +164,7 @@ def get_torch_home():
         
 try:
     nasbench = NasbenchWrapper(
-            dataset_file=os.path.join(get_torch_home(), 'nasbench_only108.tfrecord'))
+        dataset_file=os.path.join(get_torch_home(), 'nasbench_only108.tfrecord'))
 except:
     nasbench = NasbenchWrapper(
         dataset_file=os.path.join(get_torch_home(), 'nasbench_full.tfrecord'))
