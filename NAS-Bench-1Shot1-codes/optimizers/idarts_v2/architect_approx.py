@@ -134,10 +134,11 @@ class Architect(object):
             top1.update(prec1.data, n)
             top5.update(prec5.data, n)
             
-            with torch.no_grad():
-                for g1, g2 in zip(fo_grad, self.model.arch_parameters()):
-                    g1.add_(g2)
-            
+            if not (step == self.args.T - 1):
+                with torch.no_grad():
+                    for g1, g2 in zip(fo_grad, self.model.arch_parameters()):
+                        g1.add_(g2)
+                
 
         try:
             model_last=deepcopy(self.model)
@@ -187,7 +188,7 @@ class Architect(object):
         loss.backward()
 
     def _backward_step_unrolled(self, train_queue, input_valid, target_valid, eta, network_optimizer):
-        if self.args.sotl_order is None:
+        if not self.args.sotl_order or self.args.sotl_order == "basic":
             unrolled_model, grads_2, arch_fo_grad = self._compute_unrolled_model(train_queue, eta, network_optimizer)######copy a model for the L_val, since the model should nog trained by validation data
         elif self.args.sotl_order in ["second", "first"]:
             unrolled_model, grads_2, arch_fo_grad = self._compute_unrolled_model_sotl(train_queue, eta, network_optimizer)######copy a model for the L_val, since the model should nog trained by validation data
@@ -203,7 +204,8 @@ class Architect(object):
         
         
         # print(arch_fo_grad)
-        if self.args.sotl_order in ["first", "second"]:
+        if self.args.sotl_order in ["first", "second", "basic"]:
+            print(arch_fo_grad)
             with torch.no_grad():
                 for g1, g2 in zip(implicit_grads, arch_fo_grad):
                     g1.add_(g2)
