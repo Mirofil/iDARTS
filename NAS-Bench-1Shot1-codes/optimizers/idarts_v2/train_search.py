@@ -150,6 +150,8 @@ def wandb_auth(fname: str = "nas_key.txt"):
 def get_torch_home():
     if "TORCH_HOME" in os.environ:
         return os.environ["TORCH_HOME"]
+    elif os.path.exists('/storage/.torch/'):
+        return '/storage/.torch/'
     elif "HOME" in os.environ:
         return os.path.join(os.environ["HOME"], ".torch")
     else:
